@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>媒体存储转链工具</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
+    .container{max-width:1200px;margin:30px auto;padding:20px}
+    .box{border:1px solid #eee;border-radius:8px;padding:20px;margin-bottom:20px}
+    .upload-area{border:2px dashed #ccc;padding:40px;text-align:center;cursor:pointer;margin:10px 0}
+    .upload-area:hover{border-color:#238636}
+    input{width:100%;padding:10px;margin:8px 0;border:1px solid #ddd;border-radius:4px}
+    button{padding:10px 20px;background:#238636;color:white;border:none;border-radius:4px;cursor:pointer}
+    #result{margin-top:15px;padding:10px;background:#f5f5f5;word-break:break-all}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h2>图片/视频/MP3 上传&外链转存工具</h2>
+
+  <div class="box">
+    <h3>配置信息</h3>
+    <input type="text" id="token" placeholder="输入GitHub Personal Token">
+    <input type="text" id="repo" value="imgbed123/picture-bed" placeholder="仓库名 用户名/仓库">
+    <input type="text" id="saveDir" value="media" placeholder="仓库内存储文件夹">
+  </div>
+
+  <div class="box">
+    <h3>本地文件上传</h3>
+    <div class="upload-area" id="drop">点击/拖拽上传 图片/mp4/mp3</div>
+    <input type="file" id="fileInput" multiple accept="image/*,video/mp4,audio/mpeg" hidden>
+    <button id="uploadBtn">提交到仓库</button>
+  </div>
+
+  <div class="box">
+    <h3>远程链接转存</h3>
+    <input type="text" id="remoteUrl" placeholder="粘贴图片/视频/音频外链">
+    <div style="color:red;margin-top:8px;">纯网页存在跨域限制，远程转存需要后端服务，本地上传可正常使用</div>
+  </div>
+
+  <div class="box">
+    <h3>生成直链</h3>
+    <div id="result"></div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s)
+const repoApi = 'https://api.github.com/repos'
+let fileCache = null
+
+$('#drop').onclick = ()=>$('#fileInput').click()
+$('#drop').ondragover = e=>e.preventDefault()
+$('#drop').ondrop = e=>{
+  e.preventDefault()
+  fileCache = e.dataTransfer.files[0]
+  alert(`已选中文件：${fileCache.name}`)
+}
+$('#fileInput').onchange = e=>{
+  fileCache = e.target.files[0]
+  alert(`已选中文件：${fileCache.name}`)
+}
+
+$('#uploadBtn').onclick = async ()=>{
+  const token = $('#token').value
+  const repo = $('#repo').value
+  const dir = $('#saveDir').value
+  if(!token||!repo||!fileCache) return alert('请完善配置并选择文件')
+  await uploadFile(fileCache, token, repo, dir)
+}
+
+async function uploadFile(file, token, repo, dir){
+  const reader = new FileReader()
+  reader.readAsDataURL(file)
+  reader.onload = async e=>{
+    const base64 = e.target.result.split(',')[1]
+    const path = `${dir}/${Date.now()}-${file.name}`
+    const res = await fetch(`${repoApi}/${repo}/contents/${path}`,{
+      method:'PUT',
+      headers:{
+        Authorization:`token ${token}`,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({
+        message:`upload media ${file.name}`,
+        content:base64
+      })
+    })
+    const data = await res.json()
+    if(data.content){
+      const cdnLink = `https://cdn.jsdelivr.net/gh/${repo}/${path}`
+      const rawLink = data.content.download_url
+      $('#result').innerText = `CDN加速链接：${cdnLink}\n原始链接：${rawLink}`
+    }else{
+      $('#result').innerText = `上传失败：${JSON.stringify(data)}`
+    }
+  }
+}
+</script>
+</body>
+</html>
