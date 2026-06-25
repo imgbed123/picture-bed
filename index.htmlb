@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub 图床上传工具</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #4158D0 0%, #C850C0 46%, #FFCC70 100%);
+            padding: 30px 15px;
+        }
+        .container {
+            max-width: 850px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            color: white;
+            padding: 24px 30px;
+        }
+        .header h1 {
+            font-size: 26px;
+            margin-bottom: 6px;
+        }
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        .main {
+            padding: 30px;
+        }
+        .block {
+            margin-bottom: 26px;
+        }
+        .block-title {
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #222;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .input-row {
+            display: grid;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+        input {
+            width: 100%;
+            padding: 13px 16px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: 0.2s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #8b5cf6;
+            box-shadow: 0 0 0 3px rgba(139,92,246,0.15);
+        }
+        .upload-area {
+            border: 2px dashed #c4b5fd;
+            border-radius: 14px;
+            padding: 50px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-area:hover {
+            background: #f8f5ff;
+            border-color: #8b5cf6;
+        }
+        .upload-area.active {
+            background: #ede9fe;
+        }
+        .upload-icon {
+            font-size: 48px;
+            color: #8b5cf6;
+            margin-bottom: 12px;
+        }
+        .progress-wrap {
+            margin-top: 20px;
+            display: none;
+        }
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #444;
+        }
+        .progress-bg {
+            width: 100%;
+            height: 12px;
+            background: #eee;
+            border-radius: 99px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            border-radius: 99px;
+            transition: width 0.1s linear;
+        }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-primary {
+            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            color: white;
+        }
+        .btn-primary:hover {
+            opacity: 0.92;
+        }
+        .log-box {
+            margin-top: 20px;
+            background: #1e1e2e;
+            color: #a6e3a1;
+            padding: 16px;
+            border-radius: 12px;
+            min-height: 120px;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            overflow-y: auto;
+            max-height: 220px;
+        }
+        .tip {
+            font-size: 13px;
+            color: #777;
+            margin-top: 6px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>GitHub 图床上传工具</h1>
+        <p>支持本地图片上传 · 实时进度条 · 可视化操作界面</p>
+    </div>
+    <div class="main">
+        <div class="block">
+            <div class="block-title">⚙️ 仓库配置</div>
+            <div class="input-row">
+                <input id="token" placeholder="GitHub Personal Token（需完整repo权限）">
+                <p class="tip">新建Token勾选全部repo，有效期建议永久</p>
+            </div>
+            <div class="input-row">
+                <input id="repo" placeholder="仓库地址：用户名/仓库名">
+                <p class="tip">示例：zhangsan/picture-bed</p>
+            </div>
+            <div class="input-row">
+                <input id="branch" value="main" placeholder="分支名称（默认main）">
+            </div>
+            <div class="input-row">
+                <input id="path" value="img" placeholder="图片存放文件夹（如img）">
+            </div>
+        </div>
+
+        <div class="block">
+            <div class="block-title">📤 上传图片</div>
+            <div class="upload-area" id="dropBox">
+                <div class="upload-icon">🖼️</div>
+                <p>点击选择文件 / 拖拽图片到此处上传</p>
+                <p class="tip">支持 jpg/png/gif/webp，单文件≤25MB</p>
+            </div>
+            <input type="file" id="fileInput" accept="image/*" hidden multiple>
+
+            <!-- 进度条区域 -->
+            <div class="progress-wrap" id="progressWrap">
+                <div class="progress-text">
+                    <span>上传进度</span>
+                    <span id="progressNum">0%</span>
+                </div>
+                <div class="progress-bg">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" id="uploadBtn" style="margin-top:16px;">开始上传</button>
+        </div>
+
+        <div class="block">
+            <div class="block-title">📋 上传日志 & 图片链接</div>
+            <div class="log-box" id="logBox"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const log = txt => {
+    const time = new Date().toLocaleTimeString();
+    $("#logBox").innerText += `[${time}] ${txt}\n`;
+    $("#logBox").scrollTop = $("#logBox").scrollHeight;
+};
+
+// 拖拽上传
+const dropBox = $("#dropBox");
+$("#dropBox").onclick = () => $("#fileInput").click();
+dropBox.ondragover = e => { e.preventDefault(); dropBox.classList.add("active"); };
+dropBox.ondragleave = () => dropBox.classList.remove("active");
+dropBox.ondrop = e => {
+    e.preventDefault();
+    dropBox.classList.remove("active");
+    $("#fileInput").files = e.dataTransfer.files;
+};
+
+// 上传逻辑
+$("#uploadBtn").onclick = async () => {
+    const token = $("#token").value.trim();
+    const repo = $("#repo").value.trim();
+    const branch = $("#branch").value.trim() || "main";
+    const path = $("#path").value.trim() || "img";
+    const files = $("#fileInput").files;
+
+    if (!token || !repo) return log("❌ 请填写Token和仓库信息");
+    if (files.length === 0) return log("❌ 请选择要上传的图片");
+
+    $("#progressWrap").style.display = "block";
+
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 25 * 1024 * 1024) {
+            log(`⚠️ ${file.name} 超过25MB，跳过`);
+            continue;
+        }
+        await uploadFile(file, token, repo, branch, path, i, files.length);
+    }
+    log("✅ 全部任务执行完毕");
+};
+
+async function uploadFile(file, token, repo, branch, folder, idx, total) {
+    return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = async () => {
+            const base64 = reader.result.split(",")[1];
+            const fileName = file.name.replace(/[\u4e00-\u9fa5\s#&%]/g, "");
+            const filePath = `${folder}/${fileName}`;
+            const apiUrl = `https://api.github.com/repos/${repo}/contents/${filePath}`;
+
+            try {
+                await axios.put(apiUrl, {
+                    message: `upload ${fileName}`,
+                    content: base64,
+                    branch
+                }, {
+                    headers: { Authorization: `token ${token}` },
+                    onUploadProgress: (e) => {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        $("#progressBar").style.width = percent + "%";
+                        $("#progressNum").innerText = percent + "%";
+                    }
+                });
+                const cdnUrl = `https://cdn.jsdelivr.net/gh/${repo}@${branch}/${filePath}`;
+                log(`✅ ${fileName} 上传成功\n链接：${cdnUrl}`);
+            } catch (err) {
+                const msg = err.response?.data?.message || err.message;
+                log(`❌ ${fileName} 上传失败：${msg}`);
+            }
+            resolve();
+        };
+    })
+}
+</script>
+</body>
+</html>
